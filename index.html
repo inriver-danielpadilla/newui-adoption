@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New UI Adoption Dashboard</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@mui/material@5/umd/material-ui.production.min.js" crossorigin></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+  <style>
+    body { margin: 0; background: #f5f5f5; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const {
+      CssBaseline, ThemeProvider, createTheme,
+      Container, Box, Typography, Paper, Grid, Chip,
+      Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, TableSortLabel,
+      LinearProgress, TextField, InputAdornment, Tab, Tabs, Alert, IconButton, Collapse, Tooltip,
+      MenuItem, Select, FormControl, InputLabel, Button
+    } = MaterialUI;
+
+    const theme = createTheme({
+      palette: {
+        primary: { main: '#1976d2' },
+        secondary: { main: '#dc004e' },
+        success: { main: '#2e7d32' },
+        warning: { main: '#ed6c02' },
+      }
+    });
+
+    // Simple chart components using SVG (since MUI X Charts CDN isn't available, we build custom SVG charts with MUI styling)
+    function BarChart({ data, xKey, bars, height = 300, title }) {
+      if (!data || data.length === 0) return null;
+      const maxVal = Math.max(...data.map(d => Math.max(...bars.map(b => d[b.key] || 0))));
+      const barWidth = Math.max(8, Math.min(30, (800 / data.length) / bars.length - 2));
+      const chartWidth = Math.max(800, data.length * (barWidth * bars.length + 10));
+      const chartHeight = height - 60;
+
+      return (
+        <Box sx={{ width: '100%', overflowX: 'auto' }}>
+          {title && <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>{title}</Typography>}
+          <svg width={chartWidth} height={height} style={{ display: 'block' }}>
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+              <g key={i}>
+                <line x1={50} y1={20 + chartHeight * (1 - pct)} x2={chartWidth - 10} y2={20 + chartHeight * (1 - pct)} stroke="#e0e0e0" strokeWidth={1} />
+                <text x={45} y={25 + chartHeight * (1 - pct)} textAnchor="end" fontSize={10} fill="#666">{Math.round(maxVal * pct).toLocaleString()}</text>
+              </g>
+            ))}
+            {/* Bars */}
+            {data.map((d, i) => (
+              <g key={i}>
+                {bars.map((bar, bi) => {
+                  const val = d[bar.key] || 0;
+                  const barH = maxVal > 0 ? (val / maxVal) * chartHeight : 0;
+                  const x = 60 + i * (barWidth * bars.length + 10) + bi * barWidth;
+                  return (
+                    <g key={bi}>
+                      <rect x={x} y={20 + chartHeight - barH} width={barWidth - 1} height={barH} fill={bar.color} rx={2}>
+                        <title>{`${d[xKey]}: ${bar.label} = ${val.toLocaleString()}`}</title>
+                      </rect>
+                    </g>
+                  );
+                })}
+                {i % Math.ceil(data.length / 15) === 0 && (
+                  <text x={60 + i * (barWidth * bars.length + 10)} y={height - 5} fontSize={9} fill="#666" transform={`rotate(-45, ${60 + i * (barWidth * bars.length + 10)}, ${height - 5})`}>{d[xKey]}</text>
+                )}
+              </g>
+            ))}
+            {/* Legend */}
+            {bars.map((bar, i) => (
+              <g key={i}>
+                <rect x={chartWidth - 180} y={10 + i * 20} width={12} height={12} fill={bar.color} rx={2} />
+                <text x={chartWidth - 163} y={20 + i * 20} fontSize={11} fill="#333">{bar.label}</text>
+              </g>
+            ))}
+          </svg>
+        </Box>
+      );
+    }
+
+    function LineChart({ data, xKey, lines, height = 300, title }) {
+      if (!data || data.length === 0) return null;
+      const maxVal = Math.max(...data.map(d => Math.max(...lines.map(l => d[l.key] || 0))));
+      const chartWidth = Math.max(700, data.length * 60);
+      const chartHeight = height - 60;
+      const padding = { left: 55, right: 20, top: 20, bottom: 40 };
+
+      return (
+        <Box sx={{ width: '100%', overflowX: 'auto' }}>
+          {title && <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>{title}</Typography>}
+          <svg width={chartWidth} height={height} style={{ display: 'block' }}>
+            {/* Grid */}
+            {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+              <g key={i}>
+                <line x1={padding.left} y1={padding.top + chartHeight * (1 - pct)} x2={chartWidth - padding.right} y2={padding.top + chartHeight * (1 - pct)} stroke="#e0e0e0" strokeWidth={1} />
+                <text x={padding.left - 5} y={padding.top + 4 + chartHeight * (1 - pct)} textAnchor="end" fontSize={10} fill="#666">{(maxVal * pct).toFixed(maxVal <= 100 ? 1 : 0)}{maxVal <= 100 ? '%' : ''}</text>
+              </g>
+            ))}
+            {/* Lines */}
+            {lines.map((line, li) => {
+              const points = data.map((d, i) => {
+                const x = padding.left + (i / (data.length - 1)) * (chartWidth - padding.left - padding.right);
+                const y = padding.top + chartHeight - ((d[line.key] || 0) / maxVal) * chartHeight;
+                return `${x},${y}`;
+              });
+              return (
+                <g key={li}>
+                  <polyline points={points.join(' ')} fill="none" stroke={line.color} strokeWidth={2.5} />
+                  {data.map((d, i) => {
+                    const x = padding.left + (i / (data.length - 1)) * (chartWidth - padding.left - padding.right);
+                    const y = padding.top + chartHeight - ((d[line.key] || 0) / maxVal) * chartHeight;
+                    return <circle key={i} cx={x} cy={y} r={4} fill={line.color} stroke="white" strokeWidth={1.5}><title>{`${d[xKey]}: ${d[line.key]}`}</title></circle>;
+                  })}
+                </g>
+              );
+            })}
+            {/* X labels */}
+            {data.map((d, i) => {
+              const x = padding.left + (i / (data.length - 1)) * (chartWidth - padding.left - padding.right);
+              return <text key={i} x={x} y={height - 8} fontSize={9} fill="#666" textAnchor="middle" transform={`rotate(-30, ${x}, ${height - 8})`}>{d[xKey]}</text>;
+            })}
+            {/* Legend */}
+            {lines.map((line, i) => (
+              <g key={i}>
+                <line x1={chartWidth - 180} y1={16 + i * 20} x2={chartWidth - 160} y2={16 + i * 20} stroke={line.color} strokeWidth={2.5} />
+                <text x={chartWidth - 155} y={20 + i * 20} fontSize={11} fill="#333">{line.label}</text>
+              </g>
+            ))}
+          </svg>
+        </Box>
+      );
+    }
+
+    function PieChart({ data, height = 250, title }) {
+      if (!data || data.length === 0) return null;
+      const total = data.reduce((s, d) => s + d.value, 0);
+      const cx = 130, cy = 120, r = 90;
+      let startAngle = -Math.PI / 2;
+
+      return (
+        <Box sx={{ textAlign: 'center' }}>
+          {title && <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>{title}</Typography>}
+          <svg width={320} height={height} style={{ display: 'inline-block' }}>
+            {data.map((d, i) => {
+              const angle = (d.value / total) * 2 * Math.PI;
+              const endAngle = startAngle + angle;
+              const largeArc = angle > Math.PI ? 1 : 0;
+              const x1 = cx + r * Math.cos(startAngle);
+              const y1 = cy + r * Math.sin(startAngle);
+              const x2 = cx + r * Math.cos(endAngle);
+              const y2 = cy + r * Math.sin(endAngle);
+              const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+              startAngle = endAngle;
+              return <path key={i} d={path} fill={d.color}><title>{`${d.label}: ${d.value.toLocaleString()} (${((d.value/total)*100).toFixed(1)}%)`}</title></path>;
+            })}
+            <circle cx={cx} cy={cy} r={45} fill="white" />
+            <text x={cx} y={cy - 5} textAnchor="middle" fontSize={18} fontWeight="bold" fill="#333">{((data[0].value / total) * 100).toFixed(1)}%</text>
+            <text x={cx} y={cy + 14} textAnchor="middle" fontSize={10} fill="#666">Adoption</text>
+            {/* Legend */}
+            {data.map((d, i) => (
+              <g key={i}>
+                <rect x={250} y={80 + i * 25} width={12} height={12} fill={d.color} rx={2} />
+                <text x={267} y={91 + i * 25} fontSize={11} fill="#333">{d.label}</text>
+              </g>
+            ))}
+          </svg>
+        </Box>
+      );
+    }
+
+    function StatCard({ title, value, subtitle, color }) {
+      return (
+        <Paper elevation={2} sx={{ p: 2.5, textAlign: 'center', borderTop: `4px solid ${color}` }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>{title}</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700, color }}>{value}</Typography>
+          {subtitle && <Typography variant="caption" color="text.secondary">{subtitle}</Typography>}
+        </Paper>
+      );
+    }
+
+    function App() {
+      const [data, setData] = React.useState(null);
+      const [loading, setLoading] = React.useState(true);
+      const [tabValue, setTabValue] = React.useState(0);
+      const [accountPage, setAccountPage] = React.useState(0);
+      const [accountRowsPerPage, setAccountRowsPerPage] = React.useState(10);
+      const [visitorPage, setVisitorPage] = React.useState(0);
+      const [visitorRowsPerPage, setVisitorRowsPerPage] = React.useState(10);
+      const [accountSearch, setAccountSearch] = React.useState('');
+      const [visitorSearch, setVisitorSearch] = React.useState('');
+      const [accountSort, setAccountSort] = React.useState({ field: 'total', dir: 'desc' });
+      const [visitorSort, setVisitorSort] = React.useState({ field: 'total', dir: 'desc' });
+      const [expandedAccount, setExpandedAccount] = React.useState(null);
+      const [expandedVisitor, setExpandedVisitor] = React.useState(null);
+      // Raw data state
+      const [rawPage, setRawPage] = React.useState(0);
+      const [rawRowsPerPage, setRawRowsPerPage] = React.useState(25);
+      const [rawSearch, setRawSearch] = React.useState('');
+      const [rawDateFilter, setRawDateFilter] = React.useState('');
+      const [rawAccountFilter, setRawAccountFilter] = React.useState('');
+      const [rawCountryFilter, setRawCountryFilter] = React.useState('');
+      const [rawSort, setRawSort] = React.useState({ field: 't', dir: 'desc' });
+      // Category table state
+      const [catSort, setCatSort] = React.useState({ field: 'total', dir: 'desc' });
+      const [catFilter, setCatFilter] = React.useState('');
+      const [catPage, setCatPage] = React.useState(0);
+      const [catRowsPerPage, setCatRowsPerPage] = React.useState(25);
+      const [catSearch, setCatSearch] = React.useState('');
+      const [catExpanded, setCatExpanded] = React.useState(null);
+      // Path Insights table state
+      const [pathSort, setPathSort] = React.useState({ field: 'total', dir: 'desc' });
+      const [pathPage, setPathPage] = React.useState(0);
+      const [pathRowsPerPage, setPathRowsPerPage] = React.useState(25);
+      const [pathSearch, setPathSearch] = React.useState('');
+
+      React.useEffect(() => {
+        fetch('./adoption_data.json')
+          .then(r => r.json())
+          .then(d => { setData(d); setLoading(false); })
+          .catch(e => { console.error(e); setLoading(false); });
+      }, []);
+
+      // Hooks must be called unconditionally (before any early return)
+      const raw_data = data?.raw_data;
+      const filters = data?.filters;
+
+      const filteredRaw = React.useMemo(() => {
+        if (!raw_data) return [];
+        return raw_data.filter(r => {
+          if (rawDateFilter && r.d !== rawDateFilter) return false;
+          if (rawAccountFilter && r.a !== rawAccountFilter) return false;
+          if (rawCountryFilter && r.c !== rawCountryFilter) return false;
+          if (rawSearch) {
+            const s = rawSearch.toLowerCase();
+            if (!r.v.toLowerCase().includes(s) && !r.a.toLowerCase().includes(s)) return false;
+          }
+          return true;
+        }).sort((a, b) => {
+          const dir = rawSort.dir === 'asc' ? 1 : -1;
+          if (rawSort.field === 'd' || rawSort.field === 'v' || rawSort.field === 'a' || rawSort.field === 'c') {
+            return a[rawSort.field].localeCompare(b[rawSort.field]) * dir;
+          }
+          return ((a[rawSort.field] || 0) - (b[rawSort.field] || 0)) * dir;
+        });
+      }, [raw_data, rawDateFilter, rawAccountFilter, rawCountryFilter, rawSearch, rawSort]);
+
+      const rawSummary = React.useMemo(() => {
+        if (!filteredRaw.length) return { totalEvents: 0, onEvents: 0, offEvents: 0, uniqueVisitors: 0, uniqueAccounts: 0, adoptionRate: 0 };
+        const onEvents = filteredRaw.reduce((s, r) => s + r.on, 0);
+        const offEvents = filteredRaw.reduce((s, r) => s + r.off, 0);
+        const totalEvents = onEvents + offEvents;
+        const uniqueVisitors = new Set(filteredRaw.map(r => r.v)).size;
+        const uniqueAccounts = new Set(filteredRaw.map(r => r.a)).size;
+        const adoptionRate = totalEvents > 0 ? Math.round((onEvents / totalEvents) * 1000) / 10 : 0;
+        return { totalEvents, onEvents, offEvents, uniqueVisitors, uniqueAccounts, adoptionRate };
+      }, [filteredRaw]);
+
+      const { summary, date_trend, account_adoption, visitor_adoption, account_visitors, accounts_only_new_list, accounts_only_old_list, accounts_both_list, path_insights, account_paths } = data || {};
+
+      const filteredAccounts = React.useMemo(() => {
+        if (!account_adoption) return [];
+        return account_adoption.filter(a =>
+          a.account.toLowerCase().includes(accountSearch.toLowerCase())
+        ).sort((a, b) => {
+          const dir = accountSort.dir === 'asc' ? 1 : -1;
+          return (a[accountSort.field] - b[accountSort.field]) * dir;
+        });
+      }, [account_adoption, accountSearch, accountSort]);
+
+      const filteredVisitors = React.useMemo(() => {
+        if (!visitor_adoption) return [];
+        return visitor_adoption.filter(v =>
+          v.visitor.toLowerCase().includes(visitorSearch.toLowerCase()) ||
+          (typeof v.account === 'string' && v.account.toLowerCase().includes(visitorSearch.toLowerCase())) ||
+          (Array.isArray(v.account) && v.account.some(a => a.toLowerCase().includes(visitorSearch.toLowerCase())))
+        ).sort((a, b) => {
+          const dir = visitorSort.dir === 'asc' ? 1 : -1;
+          return (a[visitorSort.field] - b[visitorSort.field]) * dir;
+        });
+      }, [visitor_adoption, visitorSearch, visitorSort]);
+
+      // Combined category data
+      const categoryData = React.useMemo(() => {
+        if (!accounts_only_new_list && !accounts_both_list && !accounts_only_old_list) return [];
+        const rows = [];
+        (accounts_only_new_list || []).forEach(a => rows.push({ ...a, category: 'New UI Only' }));
+        (accounts_both_list || []).forEach(a => rows.push({ ...a, category: 'Both UIs' }));
+        (accounts_only_old_list || []).forEach(a => rows.push({ ...a, category: 'Old UI Only' }));
+        return rows;
+      }, [accounts_only_new_list, accounts_both_list, accounts_only_old_list]);
+
+      const filteredCategoryData = React.useMemo(() => {
+        let filtered = categoryData;
+        if (catFilter) filtered = filtered.filter(r => r.category === catFilter);
+        if (catSearch) {
+          const s = catSearch.toLowerCase();
+          filtered = filtered.filter(r => r.account.toLowerCase().includes(s));
+        }
+        return filtered.sort((a, b) => {
+          const dir = catSort.dir === 'asc' ? 1 : -1;
+          if (catSort.field === 'account' || catSort.field === 'category') {
+            return a[catSort.field].localeCompare(b[catSort.field]) * dir;
+          }
+          return ((a[catSort.field] || 0) - (b[catSort.field] || 0)) * dir;
+        });
+      }, [categoryData, catFilter, catSearch, catSort]);
+
+      const handleAccountSort = (field) => {
+        setAccountSort(prev => ({ field, dir: prev.field === field && prev.dir === 'desc' ? 'asc' : 'desc' }));
+      };
+      const handleVisitorSort = (field) => {
+        setVisitorSort(prev => ({ field, dir: prev.field === field && prev.dir === 'desc' ? 'asc' : 'desc' }));
+      };
+      const handleRawSort = (field) => {
+        setRawSort(prev => ({ field, dir: prev.field === field && prev.dir === 'desc' ? 'asc' : 'desc' }));
+      };
+      const handleCatSort = (field) => {
+        setCatSort(prev => ({ field, dir: prev.field === field && prev.dir === 'desc' ? 'asc' : 'desc' }));
+      };
+      const handlePathSort = (field) => {
+        setPathSort(prev => ({ field, dir: prev.field === field && prev.dir === 'desc' ? 'asc' : 'desc' }));
+      };
+
+      const filteredPathData = React.useMemo(() => {
+        let filtered = path_insights || [];
+        if (pathSearch) {
+          const s = pathSearch.toLowerCase();
+          filtered = filtered.filter(r => r.path.toLowerCase().includes(s));
+        }
+        return [...filtered].sort((a, b) => {
+          const dir = pathSort.dir === 'asc' ? 1 : -1;
+          if (pathSort.field === 'path') return a.path.localeCompare(b.path) * dir;
+          return ((a[pathSort.field] || 0) - (b[pathSort.field] || 0)) * dir;
+        });
+      }, [path_insights, pathSearch, pathSort]);
+
+      if (loading) return <Box sx={{ p: 4 }}><LinearProgress /></Box>;
+      if (!data) return <Alert severity="error" sx={{ m: 4 }}>Failed to load data. Ensure adoption_data.json is served from the same directory.</Alert>;
+
+      return (
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <Box sx={{ bgcolor: '#1976d2', color: 'white', py: 3, px: 4, mb: 3 }}>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>New UI Adoption Dashboard</Typography>
+            <Typography variant="body2" sx={{ opacity: 0.85, mt: 0.5 }}>
+              Analyzing user migration from Old UI (newui_load_off) to New UI (newui_load_on)
+              {date_trend && date_trend.length > 0 && ` — ${date_trend[0].date} to ${date_trend[date_trend.length - 1].date}`}
+            </Typography>
+          </Box>
+
+          <Container maxWidth="xl">
+            {/* Summary Cards */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard title="Overall Adoption Rate" value={`${summary.overall_adoption_rate}%`} subtitle="Events on New UI / Total Events" color="#2e7d32" />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard title="Total Events" value={summary.total_events.toLocaleString()} subtitle={`New UI: ${summary.total_events_on.toLocaleString()} | Old UI: ${summary.total_events_off.toLocaleString()}`} color="#1976d2" />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard title="Unique Visitors" value={summary.unique_visitors_total.toLocaleString()} subtitle={`New UI: ${summary.unique_visitors_on.toLocaleString()} | Old UI: ${summary.unique_visitors_off.toLocaleString()}`} color="#9c27b0" />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard title="Unique Accounts" value={summary.unique_accounts_total.toLocaleString()} subtitle={`New UI: ${summary.unique_accounts_on.toLocaleString()} | Old UI: ${summary.unique_accounts_off.toLocaleString()}`} color="#ed6c02" />
+              </Grid>
+            </Grid>
+
+            {/* Unique Visitor/Account Adoption Summary */}
+            <Paper elevation={2} sx={{ p: 2.5, mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Unique Visitor &amp; Account Adoption</Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body2" fontWeight={600}>Visitor Reach (used New UI at least once)</Typography>
+                      <Typography variant="body2" fontWeight={700} color="primary">{summary.visitor_adoption_rate}%</Typography>
+                    </Box>
+                    <LinearProgress variant="determinate" value={summary.visitor_adoption_rate} sx={{ height: 10, borderRadius: 5, bgcolor: '#e0e0e0', '& .MuiLinearProgress-bar': { bgcolor: '#9c27b0' } }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                      {summary.unique_visitors_on.toLocaleString()} of {summary.unique_visitors_total.toLocaleString()} unique visitors used New UI
+                    </Typography>
+                  </Box>
+                  <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="success.main" fontWeight={700}>{summary.visitors_only_new?.toLocaleString()}</Typography>
+                        <Typography variant="caption">New UI Only</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="warning.main" fontWeight={700}>{summary.visitors_both?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Both UIs</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="error.main" fontWeight={700}>{summary.visitors_only_old?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Old UI Only</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                  <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Adoption Rate Breakdown ({summary.unique_visitors_total.toLocaleString()} visitors)</Typography>
+                  <Grid container spacing={1}>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderColor: '#2e7d32' }}>
+                        <Typography variant="h6" color="success.main" fontWeight={700}>{summary.visitors_high_adoption?.toLocaleString()}</Typography>
+                        <Typography variant="caption">High (&ge;80%)</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderColor: '#ed6c02' }}>
+                        <Typography variant="h6" color="warning.main" fontWeight={700}>{summary.visitors_medium_adoption?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Medium (50-79%)</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderColor: '#d32f2f' }}>
+                        <Typography variant="h6" color="error.main" fontWeight={700}>{summary.visitors_low_adoption?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Low (&lt;50%)</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body2" fontWeight={600}>Account Reach (used New UI at least once)</Typography>
+                      <Typography variant="body2" fontWeight={700} color="primary">{summary.account_adoption_rate}%</Typography>
+                    </Box>
+                    <LinearProgress variant="determinate" value={summary.account_adoption_rate} sx={{ height: 10, borderRadius: 5, bgcolor: '#e0e0e0', '& .MuiLinearProgress-bar': { bgcolor: '#ed6c02' } }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                      {summary.unique_accounts_on.toLocaleString()} of {summary.unique_accounts_total.toLocaleString()} unique accounts used New UI
+                    </Typography>
+                  </Box>
+                  <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="success.main" fontWeight={700}>{summary.accounts_only_new?.toLocaleString()}</Typography>
+                        <Typography variant="caption">New UI Only</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="warning.main" fontWeight={700}>{summary.accounts_both?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Both UIs</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="error.main" fontWeight={700}>{summary.accounts_only_old?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Old UI Only</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                  <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Adoption Rate Breakdown ({summary.unique_accounts_total.toLocaleString()} accounts)</Typography>
+                  <Grid container spacing={1}>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderColor: '#2e7d32' }}>
+                        <Typography variant="h6" color="success.main" fontWeight={700}>{summary.accounts_high_adoption?.toLocaleString()}</Typography>
+                        <Typography variant="caption">High (&ge;80%)</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderColor: '#ed6c02' }}>
+                        <Typography variant="h6" color="warning.main" fontWeight={700}>{summary.accounts_medium_adoption?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Medium (50-79%)</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderColor: '#d32f2f' }}>
+                        <Typography variant="h6" color="error.main" fontWeight={700}>{summary.accounts_low_adoption?.toLocaleString()}</Typography>
+                        <Typography variant="caption">Low (&lt;50%)</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Accounts by UI Usage Category */}
+            <Paper elevation={2} sx={{ p: 2.5, mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Accounts by UI Usage Category</Typography>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  placeholder="Search accounts..."
+                  value={catSearch}
+                  onChange={e => { setCatSearch(e.target.value); setCatPage(0); }}
+                  sx={{ width: 250 }}
+                />
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel>Category</InputLabel>
+                  <Select value={catFilter} label="Category" onChange={e => { setCatFilter(e.target.value); setCatPage(0); }}>
+                    <MenuItem value="">All ({categoryData.length})</MenuItem>
+                    <MenuItem value="New UI Only">New UI Only ({accounts_only_new_list?.length || 0})</MenuItem>
+                    <MenuItem value="Both UIs">Both UIs ({accounts_both_list?.length || 0})</MenuItem>
+                    <MenuItem value="Old UI Only">Old UI Only ({accounts_only_old_list?.length || 0})</MenuItem>
+                  </Select>
+                </FormControl>
+                <Typography variant="body2" color="text.secondary">
+                  Showing {filteredCategoryData.length} accounts
+                </Typography>
+              </Box>
+              <TableContainer sx={{ maxHeight: 500 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                      <TableCell>
+                        <TableSortLabel active={catSort.field === 'account'} direction={catSort.field === 'account' ? catSort.dir : 'asc'} onClick={() => handleCatSort('account')}>Account</TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel active={catSort.field === 'category'} direction={catSort.field === 'category' ? catSort.dir : 'asc'} onClick={() => handleCatSort('category')}>Category</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={catSort.field === 'newui_load_on'} direction={catSort.field === 'newui_load_on' ? catSort.dir : 'desc'} onClick={() => handleCatSort('newui_load_on')}>New UI Events</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={catSort.field === 'newui_load_off'} direction={catSort.field === 'newui_load_off' ? catSort.dir : 'desc'} onClick={() => handleCatSort('newui_load_off')}>Old UI Events</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={catSort.field === 'total'} direction={catSort.field === 'total' ? catSort.dir : 'desc'} onClick={() => handleCatSort('total')}>Total Events</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={catSort.field === 'unique_visitors'} direction={catSort.field === 'unique_visitors' ? catSort.dir : 'desc'} onClick={() => handleCatSort('unique_visitors')}>Visitors</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={catSort.field === 'adoption_rate'} direction={catSort.field === 'adoption_rate' ? catSort.dir : 'desc'} onClick={() => handleCatSort('adoption_rate')}>Adoption Rate</TableSortLabel>
+                      </TableCell>
+                      <TableCell sx={{ width: 120 }}>Progress</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredCategoryData.slice(catPage * catRowsPerPage, catPage * catRowsPerPage + catRowsPerPage).map((row, i) => (
+                      <React.Fragment key={i}>
+                        <TableRow hover sx={{ cursor: 'pointer', bgcolor: catExpanded === row.account ? '#f5f5f5' : 'inherit' }} onClick={() => setCatExpanded(catExpanded === row.account ? null : row.account)}>
+                          <TableCell sx={{ fontWeight: 500, fontSize: '0.8rem' }}>{row.account}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={row.category}
+                              size="small"
+                              color={row.category === 'New UI Only' ? 'success' : row.category === 'Both UIs' ? 'warning' : 'error'}
+                            />
+                          </TableCell>
+                          <TableCell align="right">{row.newui_load_on.toLocaleString()}</TableCell>
+                          <TableCell align="right">{row.newui_load_off.toLocaleString()}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 500 }}>{row.total.toLocaleString()}</TableCell>
+                          <TableCell align="right">{row.unique_visitors}</TableCell>
+                          <TableCell align="right">
+                            <Chip label={`${row.adoption_rate}%`} size="small" color={row.adoption_rate >= 80 ? 'success' : row.adoption_rate >= 50 ? 'warning' : 'error'} variant="outlined" />
+                          </TableCell>
+                          <TableCell>
+                            <LinearProgress variant="determinate" value={row.adoption_rate} sx={{ height: 8, borderRadius: 4, bgcolor: '#ffcc80', '& .MuiLinearProgress-bar': { bgcolor: row.adoption_rate >= 80 ? '#2e7d32' : row.adoption_rate >= 50 ? '#ed6c02' : '#d32f2f' } }} />
+                          </TableCell>
+                        </TableRow>
+                        {catExpanded === row.account && (
+                          <TableRow>
+                            <TableCell colSpan={8} sx={{ py: 2, px: 3, bgcolor: '#fafafa' }}>
+                              <Box>
+                                {/* Visitor summary cards */}
+                                <Grid container spacing={1} sx={{ mb: 2 }}>
+                                  <Grid item xs={3}>
+                                    <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                                      <Typography variant="subtitle1" fontWeight={700}>{row.unique_visitors}</Typography>
+                                      <Typography variant="caption">Total Visitors</Typography>
+                                    </Paper>
+                                  </Grid>
+                                  <Grid item xs={3}>
+                                    <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                                      <Typography variant="subtitle1" color="success.main" fontWeight={700}>{(account_visitors && account_visitors[row.account]?.visitors_only_new) || 0}</Typography>
+                                      <Typography variant="caption">New UI Only</Typography>
+                                    </Paper>
+                                  </Grid>
+                                  <Grid item xs={3}>
+                                    <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                                      <Typography variant="subtitle1" color="warning.main" fontWeight={700}>{(account_visitors && account_visitors[row.account]?.visitors_both) || 0}</Typography>
+                                      <Typography variant="caption">Both UIs</Typography>
+                                    </Paper>
+                                  </Grid>
+                                  <Grid item xs={3}>
+                                    <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                                      <Typography variant="subtitle1" color="error.main" fontWeight={700}>{(account_visitors && account_visitors[row.account]?.visitors_only_old) || 0}</Typography>
+                                      <Typography variant="caption">Old UI Only</Typography>
+                                    </Paper>
+                                  </Grid>
+                                </Grid>
+                                {/* Visitors table */}
+                                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                                  Visitors ({(account_visitors && account_visitors[row.account]?.visitors?.length) || 0})
+                                </Typography>
+                                <Table size="small" sx={{ mb: 2, '& .MuiTableCell-root': { py: 0.5 } }}>
+                                  <TableHead>
+                                    <TableRow sx={{ bgcolor: '#eeeeee' }}>
+                                      <TableCell><strong>Visitor</strong></TableCell>
+                                      <TableCell align="right"><strong>New UI</strong></TableCell>
+                                      <TableCell align="right"><strong>Old UI</strong></TableCell>
+                                      <TableCell align="right"><strong>Total</strong></TableCell>
+                                      <TableCell align="right"><strong>Adoption</strong></TableCell>
+                                      <TableCell sx={{ width: 100 }}><strong>Progress</strong></TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {(account_visitors && account_visitors[row.account]?.visitors || []).map((v, vi) => (
+                                      <TableRow key={vi} hover>
+                                        <TableCell sx={{ fontSize: '0.78rem' }}>{v.visitor}</TableCell>
+                                        <TableCell align="right">{v.newui_load_on.toLocaleString()}</TableCell>
+                                        <TableCell align="right">{v.newui_load_off.toLocaleString()}</TableCell>
+                                        <TableCell align="right">{v.total.toLocaleString()}</TableCell>
+                                        <TableCell align="right">
+                                          <Chip label={`${v.adoption_rate}%`} size="small" color={v.adoption_rate >= 80 ? 'success' : v.adoption_rate >= 50 ? 'warning' : 'error'} variant="outlined" />
+                                        </TableCell>
+                                        <TableCell>
+                                          <LinearProgress variant="determinate" value={v.adoption_rate} sx={{ height: 6, borderRadius: 3, bgcolor: '#ffcc80', '& .MuiLinearProgress-bar': { bgcolor: v.adoption_rate >= 80 ? '#2e7d32' : v.adoption_rate >= 50 ? '#ed6c02' : '#d32f2f' } }} />
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                                {/* Top paths for this account */}
+                                {account_paths && account_paths[row.account] && account_paths[row.account].length > 0 && (
+                                  <Box>
+                                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                                      Top Paths ({account_paths[row.account].length})
+                                    </Typography>
+                                    <Table size="small" sx={{ '& .MuiTableCell-root': { py: 0.5 } }}>
+                                      <TableHead>
+                                        <TableRow sx={{ bgcolor: '#eeeeee' }}>
+                                          <TableCell><strong>Path</strong></TableCell>
+                                          <TableCell align="right"><strong>New UI</strong></TableCell>
+                                          <TableCell align="right"><strong>Old UI</strong></TableCell>
+                                          <TableCell align="right"><strong>Total</strong></TableCell>
+                                          <TableCell align="right"><strong>Adoption</strong></TableCell>
+                                        </TableRow>
+                                      </TableHead>
+                                      <TableBody>
+                                        {account_paths[row.account].map((p, pi) => (
+                                          <TableRow key={pi} hover>
+                                            <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{p.path}</TableCell>
+                                            <TableCell align="right">{p.on.toLocaleString()}</TableCell>
+                                            <TableCell align="right">{p.off.toLocaleString()}</TableCell>
+                                            <TableCell align="right">{p.total.toLocaleString()}</TableCell>
+                                            <TableCell align="right">
+                                              <Chip label={`${p.rate}%`} size="small" color={p.rate >= 80 ? 'success' : p.rate >= 50 ? 'warning' : 'error'} variant="outlined" />
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </Box>
+                                )}
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={filteredCategoryData.length}
+                page={catPage}
+                onPageChange={(e, p) => setCatPage(p)}
+                rowsPerPage={catRowsPerPage}
+                onRowsPerPageChange={e => { setCatRowsPerPage(parseInt(e.target.value)); setCatPage(0); }}
+                rowsPerPageOptions={[25, 50, 100]}
+              />
+            </Paper>
+
+            {/* Path Insights */}
+            <Paper elevation={2} sx={{ p: 2.5, mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>Path Insights — Most Visited Pages</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Adoption rate by application path. Paths with low adoption indicate areas where users still prefer the Old UI.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  placeholder="Search paths..."
+                  value={pathSearch}
+                  onChange={e => { setPathSearch(e.target.value); setPathPage(0); }}
+                  sx={{ width: 300 }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Showing {filteredPathData.length} of {(path_insights || []).length} paths
+                </Typography>
+              </Box>
+              <TableContainer sx={{ maxHeight: 500 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                      <TableCell>
+                        <TableSortLabel active={pathSort.field === 'path'} direction={pathSort.field === 'path' ? pathSort.dir : 'asc'} onClick={() => handlePathSort('path')}>Path</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={pathSort.field === 'newui_load_on'} direction={pathSort.field === 'newui_load_on' ? pathSort.dir : 'desc'} onClick={() => handlePathSort('newui_load_on')}>New UI Events</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={pathSort.field === 'newui_load_off'} direction={pathSort.field === 'newui_load_off' ? pathSort.dir : 'desc'} onClick={() => handlePathSort('newui_load_off')}>Old UI Events</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={pathSort.field === 'total'} direction={pathSort.field === 'total' ? pathSort.dir : 'desc'} onClick={() => handlePathSort('total')}>Total Events</TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active={pathSort.field === 'adoption_rate'} direction={pathSort.field === 'adoption_rate' ? pathSort.dir : 'desc'} onClick={() => handlePathSort('adoption_rate')}>Adoption Rate</TableSortLabel>
+                      </TableCell>
+                      <TableCell sx={{ width: 150 }}>Progress</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredPathData.slice(pathPage * pathRowsPerPage, pathPage * pathRowsPerPage + pathRowsPerPage).map((row, i) => (
+                      <TableRow key={i} hover>
+                        <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{row.path}</TableCell>
+                        <TableCell align="right">{row.newui_load_on.toLocaleString()}</TableCell>
+                        <TableCell align="right">{row.newui_load_off.toLocaleString()}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 500 }}>{row.total.toLocaleString()}</TableCell>
+                        <TableCell align="right">
+                          <Chip label={`${row.adoption_rate}%`} size="small" color={row.adoption_rate >= 80 ? 'success' : row.adoption_rate >= 50 ? 'warning' : 'error'} variant="outlined" />
+                        </TableCell>
+                        <TableCell>
+                          <LinearProgress variant="determinate" value={row.adoption_rate} sx={{ height: 8, borderRadius: 4, bgcolor: '#ffcc80', '& .MuiLinearProgress-bar': { bgcolor: row.adoption_rate >= 80 ? '#2e7d32' : row.adoption_rate >= 50 ? '#ed6c02' : '#d32f2f' } }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={filteredPathData.length}
+                page={pathPage}
+                onPageChange={(e, p) => setPathPage(p)}
+                rowsPerPage={pathRowsPerPage}
+                onRowsPerPageChange={e => { setPathRowsPerPage(parseInt(e.target.value)); setPathPage(0); }}
+                rowsPerPageOptions={[25, 50, 100]}
+              />
+            </Paper>
+
+            {/* Charts Row */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} md={4}>
+                <Paper elevation={2} sx={{ p: 2 }}>
+                  <PieChart
+                    title="Event Distribution"
+                    data={[
+                      { label: 'New UI', value: summary.total_events_on, color: '#2e7d32' },
+                      { label: 'Old UI', value: summary.total_events_off, color: '#ed6c02' }
+                    ]}
+                  />
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={8}>
+                <Paper elevation={2} sx={{ p: 2 }}>
+                  <LineChart
+                    title="Adoption Rate Over Time (%)"
+                    data={date_trend}
+                    xKey="date"
+                    lines={[
+                      { key: 'adoption_rate', label: 'Adoption Rate %', color: '#2e7d32' }
+                    ]}
+                    height={270}
+                  />
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* Tabs for Account / Visitor / Raw Data */}
+            <Paper elevation={2} sx={{ mb: 3 }}>
+              <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+                <Tab label="By Account" />
+                <Tab label="By Visitor" />
+                <Tab label="Raw Data" />
+              </Tabs>
+
+              {tabValue === 0 && (
+                <Box sx={{ p: 2 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Search accounts..."
+                    value={accountSearch}
+                    onChange={e => { setAccountSearch(e.target.value); setAccountPage(0); }}
+                    sx={{ mb: 2, width: 300 }}
+                  />
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                          <TableCell sx={{ width: 40 }}></TableCell>
+                          <TableCell><strong>Account</strong></TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={accountSort.field === 'unique_visitors'} direction={accountSort.field === 'unique_visitors' ? accountSort.dir : 'desc'} onClick={() => handleAccountSort('unique_visitors')}>
+                              Visitors
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={accountSort.field === 'newui_load_on'} direction={accountSort.field === 'newui_load_on' ? accountSort.dir : 'desc'} onClick={() => handleAccountSort('newui_load_on')}>
+                              New UI Events
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={accountSort.field === 'newui_load_off'} direction={accountSort.field === 'newui_load_off' ? accountSort.dir : 'desc'} onClick={() => handleAccountSort('newui_load_off')}>
+                              Old UI Events
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={accountSort.field === 'total'} direction={accountSort.field === 'total' ? accountSort.dir : 'desc'} onClick={() => handleAccountSort('total')}>
+                              Total Events
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={accountSort.field === 'adoption_rate'} direction={accountSort.field === 'adoption_rate' ? accountSort.dir : 'desc'} onClick={() => handleAccountSort('adoption_rate')}>
+                              Adoption Rate
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell sx={{ width: 150 }}>Progress</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredAccounts.slice(accountPage * accountRowsPerPage, accountPage * accountRowsPerPage + accountRowsPerPage).map((row, i) => (
+                          <React.Fragment key={i}>
+                            <TableRow hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#e3f2fd' } }} onClick={() => setExpandedAccount(expandedAccount === row.account ? null : row.account)}>
+                              <TableCell sx={{ px: 1 }}>
+                                <span className="material-icons" style={{ fontSize: 20, verticalAlign: 'middle', transition: 'transform 0.2s', transform: expandedAccount === row.account ? 'rotate(90deg)' : 'rotate(0deg)' }}>chevron_right</span>
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 500 }}>{row.account}</TableCell>
+                              <TableCell align="right">{row.unique_visitors}</TableCell>
+                              <TableCell align="right">{row.newui_load_on.toLocaleString()}</TableCell>
+                              <TableCell align="right">{row.newui_load_off.toLocaleString()}</TableCell>
+                              <TableCell align="right">{row.total.toLocaleString()}</TableCell>
+                              <TableCell align="right">
+                                <Chip
+                                  label={`${row.adoption_rate}%`}
+                                  size="small"
+                                  color={row.adoption_rate >= 80 ? 'success' : row.adoption_rate >= 50 ? 'warning' : 'error'}
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={row.adoption_rate}
+                                  sx={{ height: 8, borderRadius: 4, bgcolor: '#ffcc80', '& .MuiLinearProgress-bar': { bgcolor: row.adoption_rate >= 80 ? '#2e7d32' : row.adoption_rate >= 50 ? '#ed6c02' : '#d32f2f' } }}
+                                />
+                              </TableCell>
+                            </TableRow>
+                            {expandedAccount === row.account && (
+                              <TableRow>
+                                <TableCell colSpan={8} sx={{ p: 0, bgcolor: '#fafafa' }}>
+                                  <Box sx={{ p: 2, pl: 6 }}>
+                                    {/* Unique Visitor Adoption Summary for this account */}
+                                    <Box sx={{ mb: 2, p: 2, bgcolor: '#e8f5e9', borderRadius: 1 }}>
+                                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                                        Unique Visitor Adoption — {row.account}
+                                      </Typography>
+                                      <Grid container spacing={1} alignItems="center">
+                                        <Grid item xs={12} sm={3}>
+                                          <Box sx={{ textAlign: 'center' }}>
+                                            <Typography variant="h5" fontWeight={700} color="primary">
+                                              {(account_visitors && account_visitors[row.account]?.visitor_adoption_rate) || 0}%
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">Visitor Adoption Rate</Typography>
+                                          </Box>
+                                        </Grid>
+                                        <Grid item xs={4} sm={3}>
+                                          <Paper variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: 'white' }}>
+                                            <Typography variant="subtitle1" color="success.main" fontWeight={700}>
+                                              {(account_visitors && account_visitors[row.account]?.visitors_only_new) || 0}
+                                            </Typography>
+                                            <Typography variant="caption">New UI Only</Typography>
+                                          </Paper>
+                                        </Grid>
+                                        <Grid item xs={4} sm={3}>
+                                          <Paper variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: 'white' }}>
+                                            <Typography variant="subtitle1" color="warning.main" fontWeight={700}>
+                                              {(account_visitors && account_visitors[row.account]?.visitors_both) || 0}
+                                            </Typography>
+                                            <Typography variant="caption">Both UIs</Typography>
+                                          </Paper>
+                                        </Grid>
+                                        <Grid item xs={4} sm={3}>
+                                          <Paper variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: 'white' }}>
+                                            <Typography variant="subtitle1" color="error.main" fontWeight={700}>
+                                              {(account_visitors && account_visitors[row.account]?.visitors_only_old) || 0}
+                                            </Typography>
+                                            <Typography variant="caption">Old UI Only</Typography>
+                                          </Paper>
+                                        </Grid>
+                                      </Grid>
+                                    </Box>
+                                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                                      Visitors for {row.account} ({(account_visitors && account_visitors[row.account]?.visitors?.length) || 0} visitors)
+                                    </Typography>
+                                    <Table size="small" sx={{ '& .MuiTableCell-root': { py: 0.5 } }}>
+                                      <TableHead>
+                                        <TableRow sx={{ bgcolor: '#eeeeee' }}>
+                                          <TableCell><strong>Visitor</strong></TableCell>
+                                          <TableCell align="right"><strong>New UI</strong></TableCell>
+                                          <TableCell align="right"><strong>Old UI</strong></TableCell>
+                                          <TableCell align="right"><strong>Total</strong></TableCell>
+                                          <TableCell align="right"><strong>Adoption</strong></TableCell>
+                                          <TableCell sx={{ width: 120 }}><strong>Progress</strong></TableCell>
+                                        </TableRow>
+                                      </TableHead>
+                                      <TableBody>
+                                        {(account_visitors && account_visitors[row.account]?.visitors || []).map((v, vi) => (
+                                          <TableRow key={vi} hover>
+                                            <TableCell sx={{ fontSize: '0.78rem' }}>{v.visitor}</TableCell>
+                                            <TableCell align="right">{v.newui_load_on.toLocaleString()}</TableCell>
+                                            <TableCell align="right">{v.newui_load_off.toLocaleString()}</TableCell>
+                                            <TableCell align="right">{v.total.toLocaleString()}</TableCell>
+                                            <TableCell align="right">
+                                              <Chip label={`${v.adoption_rate}%`} size="small" color={v.adoption_rate >= 80 ? 'success' : v.adoption_rate >= 50 ? 'warning' : 'error'} variant="outlined" />
+                                            </TableCell>
+                                            <TableCell>
+                                              <LinearProgress variant="determinate" value={v.adoption_rate} sx={{ height: 6, borderRadius: 3, bgcolor: '#ffcc80', '& .MuiLinearProgress-bar': { bgcolor: v.adoption_rate >= 80 ? '#2e7d32' : v.adoption_rate >= 50 ? '#ed6c02' : '#d32f2f' } }} />
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                    {/* Top paths for this account */}
+                                    {account_paths && account_paths[row.account] && account_paths[row.account].length > 0 && (
+                                      <Box sx={{ mt: 2 }}>
+                                        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                                          Top Paths — {row.account}
+                                        </Typography>
+                                        <Table size="small" sx={{ '& .MuiTableCell-root': { py: 0.5 } }}>
+                                          <TableHead>
+                                            <TableRow sx={{ bgcolor: '#eeeeee' }}>
+                                              <TableCell><strong>Path</strong></TableCell>
+                                              <TableCell align="right"><strong>New UI</strong></TableCell>
+                                              <TableCell align="right"><strong>Old UI</strong></TableCell>
+                                              <TableCell align="right"><strong>Total</strong></TableCell>
+                                              <TableCell align="right"><strong>Adoption</strong></TableCell>
+                                            </TableRow>
+                                          </TableHead>
+                                          <TableBody>
+                                            {account_paths[row.account].map((p, pi) => (
+                                              <TableRow key={pi} hover>
+                                                <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{p.path}</TableCell>
+                                                <TableCell align="right">{p.on.toLocaleString()}</TableCell>
+                                                <TableCell align="right">{p.off.toLocaleString()}</TableCell>
+                                                <TableCell align="right">{p.total.toLocaleString()}</TableCell>
+                                                <TableCell align="right">
+                                                  <Chip label={`${p.rate}%`} size="small" color={p.rate >= 80 ? 'success' : p.rate >= 50 ? 'warning' : 'error'} variant="outlined" />
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                          </TableBody>
+                                        </Table>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <TablePagination
+                    component="div"
+                    count={filteredAccounts.length}
+                    page={accountPage}
+                    onPageChange={(e, p) => setAccountPage(p)}
+                    rowsPerPage={accountRowsPerPage}
+                    onRowsPerPageChange={e => { setAccountRowsPerPage(parseInt(e.target.value)); setAccountPage(0); }}
+                    rowsPerPageOptions={[10, 25, 50]}
+                  />
+                </Box>
+              )}
+
+              {tabValue === 1 && (
+                <Box sx={{ p: 2 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Search visitors..."
+                    value={visitorSearch}
+                    onChange={e => { setVisitorSearch(e.target.value); setVisitorPage(0); }}
+                    sx={{ mb: 2, width: 300 }}
+                  />
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                          <TableCell><strong>Visitor</strong></TableCell>
+                          <TableCell><strong>Account</strong></TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={visitorSort.field === 'newui_load_on'} direction={visitorSort.field === 'newui_load_on' ? visitorSort.dir : 'desc'} onClick={() => handleVisitorSort('newui_load_on')}>
+                              New UI Events
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={visitorSort.field === 'newui_load_off'} direction={visitorSort.field === 'newui_load_off' ? visitorSort.dir : 'desc'} onClick={() => handleVisitorSort('newui_load_off')}>
+                              Old UI Events
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={visitorSort.field === 'total'} direction={visitorSort.field === 'total' ? visitorSort.dir : 'desc'} onClick={() => handleVisitorSort('total')}>
+                              Total Events
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={visitorSort.field === 'adoption_rate'} direction={visitorSort.field === 'adoption_rate' ? visitorSort.dir : 'desc'} onClick={() => handleVisitorSort('adoption_rate')}>
+                              Adoption Rate
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell sx={{ width: 150 }}>Progress</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredVisitors.slice(visitorPage * visitorRowsPerPage, visitorPage * visitorRowsPerPage + visitorRowsPerPage).map((row, i) => (
+                          <TableRow key={i} hover>
+                            <TableCell sx={{ fontWeight: 500, fontSize: '0.8rem' }}>{row.visitor}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem' }}>{Array.isArray(row.account) ? row.account.join(', ') : (row.account || '-')}</TableCell>
+                            <TableCell align="right">{row.newui_load_on.toLocaleString()}</TableCell>
+                            <TableCell align="right">{row.newui_load_off.toLocaleString()}</TableCell>
+                            <TableCell align="right">{row.total.toLocaleString()}</TableCell>
+                            <TableCell align="right">
+                              <Chip
+                                label={`${row.adoption_rate}%`}
+                                size="small"
+                                color={row.adoption_rate >= 80 ? 'success' : row.adoption_rate >= 50 ? 'warning' : 'error'}
+                                variant="outlined"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <LinearProgress
+                                variant="determinate"
+                                value={row.adoption_rate}
+                                sx={{ height: 8, borderRadius: 4, bgcolor: '#ffcc80', '& .MuiLinearProgress-bar': { bgcolor: row.adoption_rate >= 80 ? '#2e7d32' : row.adoption_rate >= 50 ? '#ed6c02' : '#d32f2f' } }}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <TablePagination
+                    component="div"
+                    count={filteredVisitors.length}
+                    page={visitorPage}
+                    onPageChange={(e, p) => setVisitorPage(p)}
+                    rowsPerPage={visitorRowsPerPage}
+                    onRowsPerPageChange={e => { setVisitorRowsPerPage(parseInt(e.target.value)); setVisitorPage(0); }}
+                    rowsPerPageOptions={[10, 25, 50]}
+                  />
+                </Box>
+              )}
+              {tabValue === 2 && (
+                <Box sx={{ p: 2 }}>
+                  {/* Filters */}
+                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, alignItems: 'center' }}>
+                    <TextField
+                      size="small"
+                      placeholder="Search visitor or account..."
+                      value={rawSearch}
+                      onChange={e => { setRawSearch(e.target.value); setRawPage(0); }}
+                      sx={{ width: 250 }}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 140 }}>
+                      <InputLabel>Date</InputLabel>
+                      <Select value={rawDateFilter} label="Date" onChange={e => { setRawDateFilter(e.target.value); setRawPage(0); }}>
+                        <MenuItem value="">All Dates</MenuItem>
+                        {(filters?.dates || []).map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ minWidth: 180 }}>
+                      <InputLabel>Account</InputLabel>
+                      <Select value={rawAccountFilter} label="Account" onChange={e => { setRawAccountFilter(e.target.value); setRawPage(0); }}>
+                        <MenuItem value="">All Accounts</MenuItem>
+                        {(filters?.accounts || []).map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ minWidth: 130 }}>
+                      <InputLabel>Country</InputLabel>
+                      <Select value={rawCountryFilter} label="Country" onChange={e => { setRawCountryFilter(e.target.value); setRawPage(0); }}>
+                        <MenuItem value="">All Countries</MenuItem>
+                        {(filters?.countries || []).map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    <Button size="small" variant="outlined" onClick={() => { setRawSearch(''); setRawDateFilter(''); setRawAccountFilter(''); setRawCountryFilter(''); setRawPage(0); }}>Clear Filters</Button>
+                  </Box>
+
+                  {/* Summary for filtered data */}
+                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4} md={2}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">Rows</Typography>
+                        <Typography variant="h6" fontWeight={700}>{filteredRaw.length.toLocaleString()}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4} md={2}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">Total Events</Typography>
+                        <Typography variant="h6" fontWeight={700}>{rawSummary.totalEvents.toLocaleString()}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4} md={2}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">New UI Events</Typography>
+                        <Typography variant="h6" fontWeight={700} color="success.main">{rawSummary.onEvents.toLocaleString()}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4} md={2}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">Old UI Events</Typography>
+                        <Typography variant="h6" fontWeight={700} color="error.main">{rawSummary.offEvents.toLocaleString()}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4} md={2}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">Unique Visitors</Typography>
+                        <Typography variant="h6" fontWeight={700} color="secondary.main">{rawSummary.uniqueVisitors.toLocaleString()}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4} md={2}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">Adoption Rate</Typography>
+                        <Typography variant="h6" fontWeight={700} color="primary">{rawSummary.adoptionRate}%</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+
+                  {/* Raw Data Table */}
+                  <TableContainer sx={{ maxHeight: 600 }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>
+                            <TableSortLabel active={rawSort.field === 'd'} direction={rawSort.field === 'd' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('d')}>Date</TableSortLabel>
+                          </TableCell>
+                          <TableCell>
+                            <TableSortLabel active={rawSort.field === 'v'} direction={rawSort.field === 'v' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('v')}>Visitor</TableSortLabel>
+                          </TableCell>
+                          <TableCell>
+                            <TableSortLabel active={rawSort.field === 'a'} direction={rawSort.field === 'a' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('a')}>Account</TableSortLabel>
+                          </TableCell>
+                          <TableCell>
+                            <TableSortLabel active={rawSort.field === 'c'} direction={rawSort.field === 'c' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('c')}>Country</TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={rawSort.field === 'on'} direction={rawSort.field === 'on' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('on')}>New UI</TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={rawSort.field === 'off'} direction={rawSort.field === 'off' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('off')}>Old UI</TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={rawSort.field === 't'} direction={rawSort.field === 't' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('t')}>Total</TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel active={rawSort.field === 'r'} direction={rawSort.field === 'r' ? rawSort.dir : 'desc'} onClick={() => handleRawSort('r')}>Adoption</TableSortLabel>
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredRaw.slice(rawPage * rawRowsPerPage, rawPage * rawRowsPerPage + rawRowsPerPage).map((row, i) => (
+                          <TableRow key={i} hover>
+                            <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{row.d}</TableCell>
+                            <TableCell sx={{ fontSize: '0.78rem' }}>{row.v}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem' }}>{row.a}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem' }}>{row.c}</TableCell>
+                            <TableCell align="right">{row.on > 0 ? row.on.toLocaleString() : <span style={{color:'#bbb'}}>0</span>}</TableCell>
+                            <TableCell align="right">{row.off > 0 ? row.off.toLocaleString() : <span style={{color:'#bbb'}}>0</span>}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 500 }}>{row.t.toLocaleString()}</TableCell>
+                            <TableCell align="right">
+                              <Chip label={`${row.r}%`} size="small" color={row.r >= 80 ? 'success' : row.r >= 50 ? 'warning' : 'error'} variant="outlined" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <TablePagination
+                    component="div"
+                    count={filteredRaw.length}
+                    page={rawPage}
+                    onPageChange={(e, p) => setRawPage(p)}
+                    rowsPerPage={rawRowsPerPage}
+                    onRowsPerPageChange={e => { setRawRowsPerPage(parseInt(e.target.value)); setRawPage(0); }}
+                    rowsPerPageOptions={[25, 50, 100]}
+                  />
+                </Box>
+              )}
+            </Paper>
+
+            <Box sx={{ textAlign: 'center', py: 3 }}>
+              <Typography variant="caption" color="text.secondary">
+                Data processed from newui_onload_on.csv and newui_onload_off.csv | Generated {new Date().toLocaleDateString()}
+              </Typography>
+            </Box>
+          </Container>
+        </ThemeProvider>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
